@@ -166,6 +166,28 @@ export default function AdminSuratPage() {
     setSubmitting(true);
 
     try {
+      let finalTautanBerkas = tautanBerkas;
+
+      // Unggah berkas secara otomatis jika ada berkas yang dipilih tetapi belum di-upload
+      if (selectedFile) {
+        setFormError('Sedang mengunggah berkas...');
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('kategori', kategori);
+
+        const uploadRes = await fetch('/api/admin/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) {
+          throw new Error(uploadData.message || 'Gagal mengunggah berkas');
+        }
+
+        finalTautanBerkas = uploadData.tautanBerkas || uploadData.localUrl || '';
+      }
+
       const url = editingId ? `/api/admin/surat/${editingId}` : '/api/admin/surat';
       const method = editingId ? 'PUT' : 'POST';
 
@@ -181,7 +203,7 @@ export default function AdminSuratPage() {
           perihal,
           jenis,
           kategori,
-          tautanBerkas: tautanBerkas || null,
+          tautanBerkas: finalTautanBerkas || null,
           keterangan: keterangan || null,
         }),
       });
