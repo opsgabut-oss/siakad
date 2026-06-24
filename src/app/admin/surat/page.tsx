@@ -140,11 +140,21 @@ export default function AdminSuratPage() {
         body: formData,
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || 'Gagal mengunggah berkas');
+        if (res.status === 413) {
+          throw new Error('Ukuran berkas terlalu besar. Maksimal ukuran berkas adalah 4.5 MB.');
+        }
+        let errMsg = 'Gagal mengunggah berkas';
+        try {
+          const data = await res.json();
+          errMsg = data.message || errMsg;
+        } catch (e) {
+          errMsg = `Gagal mengunggah berkas (Status: ${res.status})`;
+        }
+        throw new Error(errMsg);
       }
 
+      const data = await res.json();
       setTautanBerkas(data.tautanBerkas || data.localUrl || '');
       setSelectedFile(null);
       alert('Berkas berhasil diunggah!');
@@ -180,11 +190,21 @@ export default function AdminSuratPage() {
           body: formData,
         });
 
-        const uploadData = await uploadRes.json();
         if (!uploadRes.ok) {
-          throw new Error(uploadData.message || 'Gagal mengunggah berkas');
+          if (uploadRes.status === 413) {
+            throw new Error('Ukuran berkas terlalu besar. Maksimal ukuran berkas adalah 4.5 MB.');
+          }
+          let errMsg = 'Gagal mengunggah berkas';
+          try {
+            const uploadData = await uploadRes.json();
+            errMsg = uploadData.message || errMsg;
+          } catch (e) {
+            errMsg = `Gagal mengunggah berkas (Status: ${uploadRes.status})`;
+          }
+          throw new Error(errMsg);
         }
 
+        const uploadData = await uploadRes.json();
         finalTautanBerkas = uploadData.tautanBerkas || uploadData.localUrl || '';
       }
 
@@ -208,12 +228,18 @@ export default function AdminSuratPage() {
         }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.message || 'Gagal menyimpan arsip');
+        let errMsg = 'Gagal menyimpan arsip';
+        try {
+          const data = await res.json();
+          errMsg = data.message || errMsg;
+        } catch (e) {
+          errMsg = `Gagal menyimpan arsip (Status: ${res.status})`;
+        }
+        throw new Error(errMsg);
       }
 
+      const data = await res.json();
       fetchSurat();
       setIsOpen(false);
     } catch (err: any) {
