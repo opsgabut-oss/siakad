@@ -1,0 +1,334 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  GURU
+  GURU_BK
+  KEPALA_SEKOLAH
+  SISWA
+  ORANG_TUA
+}
+
+enum StatusAbsensi {
+  HADIR
+  IZIN
+  SAKIT
+  ALPA
+}
+
+enum Hari {
+  SENIN
+  SELASA
+  RABU
+  KAMIS
+  JUMAT
+  SABTU
+}
+
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  guru      Guru?
+  siswa     Siswa?   @relation("SiswaUser")
+  orangTua  Siswa?   @relation("OrangTuaUser")
+}
+
+model TahunAjaran {
+  id      String   @id @default(uuid())
+  tahun   String   // e.g. "2025/2026"
+  aktif   Boolean  @default(false)
+  kelas   Kelas[]
+}
+
+model Kelas {
+  id            String            @id @default(uuid())
+  nama          String            // e.g. "Kelas 10-A"
+  tahunAjaranId String
+  tahunAjaran   TahunAjaran       @relation(fields: [tahunAjaranId], references: [id], onDelete: Cascade)
+  siswa         Siswa[]
+  jadwal        JadwalPelajaran[]
+  
+  // Wali Kelas Relation
+  waliKelasId   String?           @unique
+  waliKelas     Guru?             @relation(fields: [waliKelasId], references: [id], name: "WaliKelas", onDelete: SetNull)
+  
+  jurnalHarian  JurnalHarian[]
+  modulAjar     ModulAjar[]
+  tujuanPembelajaran TujuanPembelajaran[]
+}
+
+model Guru {
+  id          String            @id @default(uuid())
+  nip         String?           @unique // 18 digit (opsional)
+  nik         String?           @unique // 16 digit (opsional)
+  nama        String
+  kontak      String
+  userId      String?           @unique
+  user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  absensi     Absensi[]
+  absensiGuru AbsensiGuru[]
+  jadwal      JadwalPelajaran[]
+  
+  kelasWali Kelas?           @relation("WaliKelas")
+  jurnalHarian JurnalHarian[]
+  tandaTangan  String?          // Scan tanda tangan guru (Base64)
+  noAbsen      Int?             // Nomor urut manual guru untuk absensi
+  pangkat      String?          // Pangkat guru
+  golongan     String?          // Golongan guru
+  modulAjar    ModulAjar[]
+}
+
+model AbsensiGuru {
+  id          String        @id @default(uuid())
+  guruId      String
+  guru        Guru          @relation(fields: [guruId], references: [id], onDelete: Cascade)
+  tanggal     DateTime      @db.Date
+  status      StatusAbsensi // HADIR, IZIN, SAKIT, ALPA
+  keterangan  String?       // e.g. "Sakit Flu", "Izin Acara Keluarga"
+  waktuDatang DateTime?     // Jam datang (real-time)
+  waktuPulang DateTime?     // Jam pulang (real-time)
+  ttdDatang   String?       // Tanda tangan datang (Base64)
+  ttdPulang   String?       // Tanda tangan pulang (Base64)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([guruId, tanggal])
+}
+
+model Siswa {
+  id             String    @id @default(uuid())
+  nisn           String    @unique // 10 digit
+  nama           String
+  kelasId        String
+  kelas          Kelas     @relation(fields: [kelasId], references: [id], onDelete: Cascade)
+  kontakOrangTua String
+  tanggalLahir   DateTime? @db.Date
+  
+  userId         String?   @unique
+  user           User?     @relation(fields: [userId], references: [id], name: "SiswaUser", onDelete: SetNull)
+  
+  orangTuaUserId String?   @unique
+  orangTuaUser   User?     @relation(fields: [orangTuaUserId], references: [id], name: "OrangTuaUser", onDelete: SetNull)
+  
+  absensi        Absensi[]
+  nilai          Nilai[]
+  pelanggaran    PelanggaranSiswa[]
+  catatanBK      CatatanBK[]
+  noAbsen        Int?             // Nomor absen manual siswa
+  capaianTP      CapaianTP[]
+}
+
+model Absensi {
+  id            String        @id @default(uuid())
+  siswaId       String
+  siswa         Siswa         @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+  tanggal       DateTime      @db.Date
+  status        StatusAbsensi
+  diabsenOlehId String
+  diabsenOleh   Guru          @relation(fields: [diabsenOlehId], references: [id], onDelete: Cascade)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([siswaId, tanggal])
+}
+
+model MataPelajaran {
+  id           String            @id @default(uuid())
+  nama         String            // e.g. "Matematika"
+  kode         String            @unique // e.g. "MTK"
+  jadwal             JadwalPelajaran[]
+  nilai              Nilai[]
+  jurnalHarian       JurnalHarian[]
+  tujuanPembelajaran TujuanPembelajaran[]
+  modulAjar          ModulAjar[]
+}
+
+model JadwalPelajaran {
+  id              String        @id @default(uuid())
+  kelasId         String
+  kelas           Kelas         @relation(fields: [kelasId], references: [id], onDelete: Cascade)
+  mataPelajaranId String
+  mataPelajaran   MataPelajaran @relation(fields: [mataPelajaranId], references: [id], onDelete: Cascade)
+  guruId          String
+  guru            Guru          @relation(fields: [guruId], references: [id], onDelete: Cascade)
+  hari            Hari
+  jamMulai        String        // e.g. "07:30"
+  jamSelesai      String        // e.g. "09:00"
+}
+
+model Nilai {
+  id              String        @id @default(uuid())
+  siswaId         String
+  siswa           Siswa         @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+  mataPelajaranId String
+  mataPelajaran   MataPelajaran @relation(fields: [mataPelajaranId], references: [id], onDelete: Cascade)
+  harian1         Int?
+  harian2         Int?
+  harian3         Int?
+  harian4         Int?
+  harian5         Int?
+  harian6         Int?
+  uts             Int?
+  uas             Int?
+  rapor           Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([siswaId, mataPelajaranId])
+}
+
+model PelanggaranSiswa {
+  id              String   @id @default(uuid())
+  siswaId         String
+  siswa           Siswa    @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+  tanggal         DateTime @db.Date
+  namaPelanggaran String
+  poin            Int
+  keterangan      String   // AES-256 encrypted description
+  dilaporkanOleh  String   // plain text name or role of reporter
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CatatanBK {
+  id           String   @id @default(uuid())
+  siswaId      String
+  siswa        Siswa    @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+  tanggal      DateTime @db.Date
+  kategori     String   // e.g. Bimbingan Pribadi, Bimbingan Belajar
+  permasalahan String   // AES-256 encrypted permasalahan
+  tindakan     String   // AES-256 encrypted tindakan / solusi
+  status       String   // e.g. Selesai, Tindak Lanjut
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model JurnalHarian {
+  id              String        @id @default(uuid())
+  tanggal         DateTime      @db.Date
+  kelasId         String
+  kelas           Kelas         @relation(fields: [kelasId], references: [id], onDelete: Cascade)
+  guruId          String
+  guru            Guru          @relation(fields: [guruId], references: [id], onDelete: Cascade)
+  mataPelajaranId String
+  mataPelajaran   MataPelajaran @relation(fields: [mataPelajaranId], references: [id], onDelete: Cascade)
+  materi          String
+  catatan         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum JenisSurat {
+  MASUK
+  KELUAR
+}
+
+model ArsipSurat {
+  id              String      @id @default(uuid())
+  nomorSurat      String      @unique
+  tanggalSurat    DateTime    @db.Date
+  tanggalDiterima DateTime?   @db.Date
+  pengirim        String
+  penerima        String
+  perihal         String
+  jenis           JenisSurat
+  tautanBerkas    String?
+  keterangan      String?
+  kategori        String      @default("SURAT_MASUK")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model ProfilSekolah {
+  id             String   @id @default("single-profile")
+  pemerintah     String   @default("Pemerintah Kabupaten Pati")
+  dinas          String   @default("Dinas Pendidikan dan Kebudayaan")
+  namaSekolah    String   @default("SD Negeri Wedusan")
+  npsn           String?  @default("20338123")
+  alamat         String   @default("Jl. Puncel - Ngablak KM. 05 Desa Wedusan, Kec. Dukuhseti, Kab. Pati (59158)")
+  telepon        String?  @default("081234567890")
+  email          String?  @default("sdnwedusan@gmail.com")
+  website        String?  @default("www.sdnwedusan.sch.id")
+  logoPemdaUrl   String?
+  logoSekolahUrl String?
+  namaKepsek     String   @default("Sudarto, S.Pd")
+  nipKepsek      String?  @default("197408122005011002")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model TujuanPembelajaran {
+  id              String        @id @default(uuid())
+  mataPelajaranId String
+  mataPelajaran   MataPelajaran @relation(fields: [mataPelajaranId], references: [id], onDelete: Cascade)
+  kelasId         String?
+  kelas           Kelas?        @relation(fields: [kelasId], references: [id], onDelete: Cascade)
+  deskripsi       String        // e.g. "Membaca dan menulis bilangan cacah sampai 10.000"
+  kktp            Int           @default(70) // Batas ketuntasan minimal
+  alokasiJP       Int           @default(4)  // Jumlah jam pelajaran (untuk Prota)
+  semester        Int           @default(1)  // 1: Ganjil, 2: Genap
+  
+  capaianSiswa    CapaianTP[]
+  promesMinggu    PromesMinggu[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model PromesMinggu {
+  id                   String             @id @default(uuid())
+  tujuanPembelajaranId String
+  tujuanPembelajaran   TujuanPembelajaran @relation(fields: [tujuanPembelajaranId], references: [id], onDelete: Cascade)
+  bulan                Int                // 1-12 (misal: 7 untuk Juli)
+  mingguKe             Int                // 1-5 (minggu ke-1 sampai ke-5 dalam bulan tersebut)
+  
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@unique([tujuanPembelajaranId, bulan, mingguKe])
+}
+
+model CapaianTP {
+  id                   String             @id @default(uuid())
+  siswaId              String
+  siswa                Siswa              @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+  tujuanPembelajaranId String
+  tujuanPembelajaran   TujuanPembelajaran @relation(fields: [tujuanPembelajaranId], references: [id], onDelete: Cascade)
+  tercapai             Boolean            @default(true) // true: Tercapai, false: Perlu Bimbingan
+  
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@unique([siswaId, tujuanPembelajaranId])
+}
+
+model ModulAjar {
+  id              String        @id @default(uuid())
+  judul           String
+  mataPelajaranId String
+  mataPelajaran   MataPelajaran @relation(fields: [mataPelajaranId], references: [id], onDelete: Cascade)
+  kelasId         String?
+  kelas           Kelas?        @relation(fields: [kelasId], references: [id], onDelete: SetNull)
+  guruId          String
+  guru            Guru          @relation(fields: [guruId], references: [id], onDelete: Cascade)
+  informasiUmum   Json
+  komponenInti    Json
+  lampiran        Json?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
